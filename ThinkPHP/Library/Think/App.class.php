@@ -86,6 +86,7 @@ class App {
             $action  =  'run';
         }else{
             //创建控制器实例
+            ///return new $class实例化对象--Index控制器
             $module  =  controller(CONTROLLER_NAME,CONTROLLER_PATH);                
         }
 
@@ -104,7 +105,7 @@ class App {
 
         // 获取当前操作名 支持动态路由
         if(!isset($action)){
-            $action    =   ACTION_NAME.C('ACTION_SUFFIX');  
+            $action    =   ACTION_NAME.C('ACTION_SUFFIX');
         }
         try{
             self::invokeAction($module,$action);
@@ -116,6 +117,8 @@ class App {
         return ;
     }
     public static function invokeAction($module,$action){
+        ///$module Home\Controller\IndexController实例化对象
+        ///$action index
 	if(!preg_match('/^[A-Za-z](\w)*$/',$action)){
 		// 非法操作
 		throw new \ReflectionException();
@@ -157,6 +160,7 @@ class App {
 					E(L('_PARAM_ERROR_').':'.$name);
 				}   
 			}
+
 			// 开启绑定参数过滤机制
 			if(C('URL_PARAMS_SAFE')){
 				$filters     =   C('URL_PARAMS_FILTER')?:C('DEFAULT_FILTER');
@@ -170,6 +174,7 @@ class App {
 			array_walk_recursive($args,'think_filter');
 			$method->invokeArgs($module,$args);
 		}else{
+		    ///执行方法和类的反射
 			$method->invoke($module);
 		}
 		// 后置操作

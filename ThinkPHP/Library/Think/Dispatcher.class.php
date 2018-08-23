@@ -21,12 +21,23 @@ class Dispatcher {
      * @return void
      */
     static public function dispatch() {
-        $varPath        =   C('VAR_PATHINFO');
+        $varPath        =   C('VAR_PATHINFO');///s
         $varAddon       =   C('VAR_ADDON');
-        $varModule      =   C('VAR_MODULE');
-        $varController  =   C('VAR_CONTROLLER');
-        $varAction      =   C('VAR_ACTION');
-        $urlCase        =   C('URL_CASE_INSENSITIVE');
+        $varModule      =   C('VAR_MODULE'); ///m
+        $varController  =   C('VAR_CONTROLLER');///c
+        $varAction      =   C('VAR_ACTION');///a
+        $urlCase        =   C('URL_CASE_INSENSITIVE');///true
+
+        ///var_dump($varPath,$varAddon,$varModule,$varController,$varAction,$urlCase);
+        ///string(1) "s" string(5) "addon" string(1) "m" string(1) "c" string(1) "a" bool(false)
+        /*
+         * dump($_SERVER);die;默认是没有PATH_INFO 兼容模式s=***存入$_GET，pathinfo模式/Home/Ok/Index在index.php后边索引会存入!!
+        pathinfo模式 http://www.com/mooc_video/tp/index.php/Home/Index/Index----$_SERVER['PATH_INFO']默认会存到$_SERVER中
+        普通模式    http://www.com/mooc_video/tp/index.php?m=Home&c=Index&a=Index
+        兼容模式    http://www.com/mooc_video/tp/index.php?s=Home/Index/index---下面的判断会存入到PATH_INFO中
+        没有后缀模式 http://www.com/mooc_video/tp/index.php
+        */
+
         if(isset($_GET[$varPath])) { // 判断URL里面是否有兼容模式参数
             $_SERVER['PATH_INFO'] = $_GET[$varPath];
             unset($_GET[$varPath]);
@@ -93,14 +104,27 @@ class Dispatcher {
                 }
             }
         }
+
+        /*如果不是兼容模式或者pathinfo模式的判断
+        *http://www.com/mooc_video/tp/index.php
+        *http://www.com/mooc_video/tp/index.php?m=Home&c=Index&a=Index
+        *http://www.com/mooc_video/tp/index.php?s=Home/Index/index
+        *http://www.com/mooc_video/tp/index.php/Home/Index/Index
+        *http://www.com/mooc_video/tp/index.php?123=Home/Index/index
+        */
+        //dump($_SERVER['PATH_INFO']);die;
+
+
         // 分析PATHINFO信息
         if(!isset($_SERVER['PATH_INFO'])) {
             $types   =  explode(',',C('URL_PATHINFO_FETCH'));
             foreach ($types as $type){
+                ///判断字符串中是否首位是：
                 if(0===strpos($type,':')) {// 支持函数判断
                     $_SERVER['PATH_INFO'] =   call_user_func(substr($type,1));
                     break;
                 }elseif(!empty($_SERVER[$type])) {
+                    ///判断$_SERVER中是否有--字符串
                     $_SERVER['PATH_INFO'] = (0 === strpos($_SERVER[$type],$_SERVER['SCRIPT_NAME']))?
                         substr($_SERVER[$type], strlen($_SERVER['SCRIPT_NAME']))   :  $_SERVER[$type];
                     break;
@@ -111,19 +135,34 @@ class Dispatcher {
         $depr = C('URL_PATHINFO_DEPR');
         define('MODULE_PATHINFO_DEPR',  $depr);
 
+        /*只有兼容模式和pathinfo模式不为空--其他为空
+         *dump($_SERVER['PATH_INFO']);die;
+         * */
+
         if(empty($_SERVER['PATH_INFO'])) {
             $_SERVER['PATH_INFO'] = '';
             define('__INFO__','');
             define('__EXT__','');
         }else{
+            ///Home/Index/index或者/Home/Index/Index
             define('__INFO__',trim($_SERVER['PATH_INFO'],'/'));
             // URL后缀
+            ///获取后缀并转为小写
             define('__EXT__', strtolower(pathinfo($_SERVER['PATH_INFO'],PATHINFO_EXTENSION)));
-            $_SERVER['PATH_INFO'] = __INFO__;     
+            $_SERVER['PATH_INFO'] = __INFO__;
+            ///如果是多入口？？？
             if(!defined('BIND_MODULE') && (!C('URL_ROUTER_ON') || !Route::check())){
                 if (__INFO__ && C('MULTI_MODULE')){ // 获取模块名
                     $paths      =   explode($depr,__INFO__,2);
+                    /*
+                     * array(2) {
+                      [0] => string(4) "Home"
+                      [1] => string(11) "Index/index"
+                    }
+                     * */
+                    ///配置文件里没有添加则为null
                     $allowList  =   C('MODULE_ALLOW_LIST'); // 允许的模块列表
+                    ///如果是module.html  把扩展替换为空
                     $module     =   preg_replace('/\.' . __EXT__ . '$/i', '',$paths[0]);
                     if( empty($allowList) || (is_array($allowList) && in_array_case($module, $allowList))){
                         $_GET[$varModule]       =   $module;
@@ -132,13 +171,29 @@ class Dispatcher {
                 }
             }             
         }
+        /*
+         *var_dump( $_GET[$varModule],$_SERVER['PATH_INFO']);die;
+         * *pathinfo和兼容模式输出string(4) "Home" string(11) "Index/index" 或者string(4) "Home" string(11) "Index/Index"
+         * 其他模式为null活'';
+         */
 
         // URL常量
+        /*获取REQUEST_URI除域名外其他部分
+         * /mooc_video/tp/index.php---没有path的跳到默认Home模块
+         * /mooc_video/tp/index.php?m=Home&c=Index&a=Index-->普通模式直接将url参数存在$_GET参数中["m"=>"Admin","c"=>"Index","a"=>"Index"]
+         * /mooc_video/tp/index.php?s=Home/Index/index--->兼容模式 会跳到指定的模块下Home或者Admin
+         * /mooc_video/tp/index.php/Home/Index/Index--->pathinfo模式 会跳到指定的模块下Home或者Admin
+         * /mooc_video/tp/index.php/Home/Index/Index.html--->pathinfo模式 会跳到指定的模块下Home或者Admin
+         * /mooc_video/tp/index.php?123=Admin/Index/index---如此输入错误的$_GET[$varModule]中没有模块--跳到默认Home模块
+         * */
         define('__SELF__',strip_tags($_SERVER[C('URL_REQUEST_URI')]));
-
         // 获取模块名称
         define('MODULE_NAME', defined('BIND_MODULE')? BIND_MODULE : self::getModule($varModule));
-        
+        ///dump(MODULE_NAME);DIE;
+        /*如果是普通模式--直接过去url中的模块，pathinfo和兼容模式存在$_GET[$varmodule]中（通过拆分/后第一个获取）
+         * 其他情况默认请求Home
+         * */
+
         // 检测模块是否存在
         if( MODULE_NAME && (defined('BIND_MODULE') || !in_array_case(MODULE_NAME,C('MODULE_DENY_LIST')) ) && is_dir(APP_PATH.MODULE_NAME)){
             // 定义当前模块路径
@@ -193,10 +248,18 @@ class Dispatcher {
 	        // 当前应用地址
 	        define('__APP__',strip_tags(PHP_FILE));
 	    }
+	    /**
+	    echo PHP_FILE;die;  /mooc_video/tp/index.php
+        */
+
         // 模块URL地址
         $moduleName    =   defined('MODULE_ALIAS')? MODULE_ALIAS : MODULE_NAME;
+        ///__MODULE__
         define('__MODULE__',(defined('BIND_MODULE') || !C('MULTI_MODULE'))? __APP__ : __APP__.'/'.($urlCase ? strtolower($moduleName) : $moduleName));
+        ///echo __MODULE__;die; /mooc_video/tp/index.php/Home
 
+
+        ///pathinfo模式或者兼容模式
         if('' != $_SERVER['PATH_INFO'] && (!C('URL_ROUTER_ON') ||  !Route::check()) ){   // 检测路由规则 如果没有则按默认规则调度URL
             Hook::listen('path_info');
             // 检查禁止访问的URL后缀
@@ -204,10 +267,10 @@ class Dispatcher {
                 send_http_status(404);
                 exit;
             }
-            
+
+            ///注意此处由于169行的处理$_SERVER['PATH_INFO']已经只剩下"控制器和方法"了
             // 去除URL后缀
             $_SERVER['PATH_INFO'] = preg_replace(C('URL_HTML_SUFFIX')? '/\.('.trim(C('URL_HTML_SUFFIX'),'.').')$/i' : '/\.'.__EXT__.'$/i', '', $_SERVER['PATH_INFO']);
-
             $depr   =   C('URL_PATHINFO_DEPR');
             $paths  =   explode($depr,trim($_SERVER['PATH_INFO'],$depr));
 
@@ -216,10 +279,13 @@ class Dispatcher {
                     $_GET[$varController]   =   implode('/',array_slice($paths,0,C('CONTROLLER_LEVEL')));
                     $paths  =   array_slice($paths, C('CONTROLLER_LEVEL'));
                 }else{
+                    ///解析控制器--写入$_GET['c']===>最后通过调用类中方法赋值给常量
                     $_GET[$varController]   =   array_shift($paths);
                 }
             }
-            // 获取操作
+            ///dump($_GET);die;
+
+            ///解析方法---写入$_GET['a']===>最后通过调用类中方法赋值给常量
             if(!defined('BIND_ACTION')){
                 $_GET[$varAction]  =   array_shift($paths);
             }
@@ -233,8 +299,10 @@ class Dispatcher {
             }
             $_GET   =  array_merge($var,$_GET);
         }
+
         // 获取控制器的命名空间（路径）
         define('CONTROLLER_PATH',   self::getSpace($varAddon,$urlCase));
+
         // 获取控制器和操作名
         define('CONTROLLER_NAME',   defined('BIND_CONTROLLER')? BIND_CONTROLLER : self::getController($varController,$urlCase));
         define('ACTION_NAME',       defined('BIND_ACTION')? BIND_ACTION : self::getAction($varAction,$urlCase));
@@ -276,6 +344,7 @@ class Dispatcher {
                 return   '';
             }
         }
+
         if($urlCase) {
             // URL地址不区分大小写
             // 智能识别方式 user_type 识别到 UserTypeController 控制器
